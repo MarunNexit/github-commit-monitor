@@ -4,7 +4,7 @@ name: Monitor DOTA2_CLIENT
 on:
 
   schedule:
-    - cron: "*/4 * * * *"
+    - cron: "*/3 * * * *"
 
 
   workflow_dispatch:

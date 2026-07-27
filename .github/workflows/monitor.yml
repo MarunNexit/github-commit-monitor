@@ -1,12 +1,14 @@
-name: Monitor DOTA2 Client commits
+name: Monitor DOTA2_CLIENT
 
 
 on:
 
   schedule:
+    # every 5 minutes
     - cron: "*/5 * * * *"
 
 
+  # manual run button
   workflow_dispatch:
 
 
@@ -25,52 +27,54 @@ jobs:
     steps:
 
 
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
 
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
 
-      with:
-        python-version: "3.12"
-
-
-
-    - name: Install dependencies
-      run:
-
-        pip install -r requirements.txt
+        with:
+          python-version: "3.12"
 
 
 
-    - name: Run monitor
-
-      env:
-
-        ELITEA_WEBHOOK:
-          ${{ secrets.ELITEA_WEBHOOK }}
-
-      run:
-
-        python monitor.py
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
 
 
-    - name: Save state
+      - name: Run monitor
 
-      run:
+        env:
 
-        git config user.name "github-actions"
+          ELITEA_WEBHOOK:
+            ${{ secrets.ELITEA_WEBHOOK }}
 
-        git config user.email "github-actions@github.com"
-
-
-        git add last_commit.json || true
-
-
-        git commit -m "Update commit state" || true
+          ELITEA_SECRET:
+            ${{ secrets.ELITEA_SECRET }}
 
 
-        git push
+        run: |
+          python monitor.py
+
+
+
+      - name: Save commit state
+
+        run: |
+
+          git config user.name "github-actions"
+
+          git config user.email "github-actions@github.com"
+
+
+          git add last_commit.json
+
+
+          git commit -m "Update last commit state" || true
+
+
+          git push

@@ -1,22 +1,29 @@
 import os
 import json
+import hmac
+import hashlib
 import requests
 
 
-# Repository to monitor
+# GitHub repository to monitor
 OWNER = "muk-as"
 REPO = "DOTA2_CLIENT"
 BRANCH = "master"
 
 
-# Elitea webhook
-ELITEA_WEBHOOK = os.environ.get("ELITEA_WEBHOOK")
+# Elitea webhook URL
+ELITEA_WEBHOOK = os.environ["ELITEA_WEBHOOK"]
+
+# Elitea webhook secret
+ELITEA_SECRET = os.environ["ELITEA_SECRET"]
 
 
 STATE_FILE = "last_commit.json"
 
 
+
 def get_latest_commit():
+
     url = (
         f"https://api.github.com/repos/"
         f"{OWNER}/{REPO}/commits?sha={BRANCH}"
@@ -31,6 +38,7 @@ def get_latest_commit():
     return commits[0]
 
 
+
 def load_previous_commit():
 
     if not os.path.exists(STATE_FILE):
@@ -42,6 +50,7 @@ def load_previous_commit():
     return data.get("sha")
 
 
+
 def save_commit(sha):
 
     with open(STATE_FILE, "w") as file:
@@ -49,8 +58,23 @@ def save_commit(sha):
             {
                 "sha": sha
             },
-            file
+            file,
+            indent=2
         )
+
+
+
+def create_signature(body):
+
+    signature = hmac.new(
+        ELITEA_SECRET.encode("utf-8"),
+        body.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+
+    return f"sha256={signature}"
+
 
 
 def send_to_elitea(commit):
@@ -59,39 +83,65 @@ def send_to_elitea(commit):
         "repository": f"{OWNER}/{REPO}",
         "branch": BRANCH,
         "commit_sha": commit["sha"],
-        "message": commit["commit"]["message"],
+        "commit_message": commit["commit"]["message"],
         "author": commit["commit"]["author"]["name"],
-        "url": commit["html_url"]
+        "commit_url": commit["html_url"]
+    }
+
+
+    body = json.dumps(payload)
+
+
+    signature = create_signature(body)
+
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Hub-Signature-256": signature
     }
 
 
     response = requests.post(
         ELITEA_WEBHOOK,
-        json=payload
+        data=body,
+        headers=headers
+    )
+
+
+    print(
+        "Elitea response:",
+        response.status_code,
+        response.text
     )
 
 
     response.raise_for_status()
 
-    print("Elitea triggered")
-
 
 
 def main():
 
+    print("Checking repository...")
+
     commit = get_latest_commit()
+
 
     current_sha = commit["sha"]
 
-    old_sha = load_previous_commit()
+    previous_sha = load_previous_commit()
 
 
-    print("Current:", current_sha)
-    print("Previous:", old_sha)
+    print("Current commit:")
+    print(current_sha)
 
 
-    # first run
-    if old_sha is None:
+    print("Previous commit:")
+    print(previous_sha)
+
+
+
+    # First run
+    if previous_sha is None:
 
         save_commit(current_sha)
 
@@ -103,7 +153,7 @@ def main():
 
 
 
-    if current_sha != old_sha:
+    if current_sha != previous_sha:
 
         print(
             "New commit detected!"
@@ -119,7 +169,7 @@ def main():
     else:
 
         print(
-            "No changes"
+            "No new commits"
         )
 
 

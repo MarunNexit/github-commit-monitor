@@ -4,10 +4,15 @@ name: Monitor DOTA2_CLIENT
 on:
 
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/4 * * * *"
 
 
   workflow_dispatch:
+
+
+permissions:
+
+  contents: read
 
 
 
@@ -16,13 +21,6 @@ jobs:
   monitor:
 
     runs-on: ubuntu-latest
-
-
-  permissions:
-    contents: read
-    actions: write
-    repository-projects: write
-
 
 
     steps:
@@ -42,7 +40,9 @@ jobs:
 
 
       - name: Install dependencies
+
         run: |
+
           pip install -r requirements.txt
 
 
@@ -51,18 +51,33 @@ jobs:
 
         env:
 
-          ELITEA_WEBHOOK:
-            ${{ secrets.ELITEA_WEBHOOK }}
+          ELITEA_WEBHOOK: ${{ secrets.ELITEA_WEBHOOK }}
 
-          ELITEA_SECRET:
-            ${{ secrets.ELITEA_SECRET }}
+          ELITEA_SECRET: ${{ secrets.ELITEA_SECRET }}
 
-          LAST_COMMIT_SHA:
-            ${{ vars.LAST_COMMIT_SHA }}
-
-          GITHUB_TOKEN:
-            ${{ secrets.GITHUB_TOKEN }}
-
+          LAST_COMMIT_SHA: ${{ vars.LAST_COMMIT_SHA }}
 
         run: |
+
           python monitor.py
+
+
+
+      - name: Update variable
+
+        if: always()
+
+        env:
+
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+
+        run: |
+
+          if [ -f new_sha.txt ]; then
+
+            SHA=$(cat new_sha.txt)
+
+            gh variable set LAST_COMMIT_SHA \
+              --body "$SHA"
+
+          fi

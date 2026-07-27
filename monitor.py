@@ -9,16 +9,12 @@ OWNER = "muk-as"
 REPO = "DOTA2_CLIENT"
 BRANCH = "master"
 
-
 ELITEA_WEBHOOK = os.environ["ELITEA_WEBHOOK"]
 ELITEA_SECRET = os.environ["ELITEA_SECRET"]
 
 CURRENT_SHA = os.environ.get("LAST_COMMIT_SHA", "")
 
-GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-
-VARIABLE_NAME = "LAST_COMMIT_SHA"
-
+NEW_SHA_FILE = "new_sha.txt"
 
 
 def get_latest_commit():
@@ -28,7 +24,6 @@ def get_latest_commit():
         f"{OWNER}/{REPO}/commits?sha={BRANCH}"
     )
 
-
     response = requests.get(url)
 
     response.raise_for_status()
@@ -36,17 +31,15 @@ def get_latest_commit():
     return response.json()[0]
 
 
-
 def create_signature(body):
 
     signature = hmac.new(
-        ELITEA_SECRET.encode(),
-        body.encode(),
+        ELITEA_SECRET.encode("utf-8"),
+        body.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
 
     return f"sha256={signature}"
-
 
 
 def send_to_elitea(commit):
@@ -77,54 +70,29 @@ def send_to_elitea(commit):
     )
 
 
-    print(response.status_code)
-    print(response.text)
-
-
-    response.raise_for_status()
-
-
-
-def update_variable(new_sha):
-
-    url = (
-        f"https://api.github.com/repos/"
-        f"{os.environ['GITHUB_REPOSITORY']}"
-        f"/actions/variables/{VARIABLE_NAME}"
-    )
-
-
-    headers = {
-        "Authorization":
-            f"Bearer {GITHUB_TOKEN}",
-
-        "Accept":
-            "application/vnd.github+json"
-    }
-
-
-    body = {
-        "name": VARIABLE_NAME,
-        "value": new_sha
-    }
-
-
-    response = requests.patch(
-        url,
-        headers=headers,
-        json=body
+    print(
+        "Elitea:",
+        response.status_code,
+        response.text
     )
 
 
     response.raise_for_status()
+
+
+
+def save_new_sha(sha):
+
+    with open(NEW_SHA_FILE, "w") as file:
+        file.write(sha)
 
 
 
 def main():
 
-    latest = get_latest_commit()
+    commit = get_latest_commit()
 
-    latest_sha = latest["sha"]
+    latest_sha = commit["sha"]
 
 
     print(
@@ -138,37 +106,35 @@ def main():
     )
 
 
-    # first run
     if not CURRENT_SHA:
 
         print(
-            "First run. Saving SHA."
+            "First run"
         )
 
-        update_variable(latest_sha)
+        save_new_sha(latest_sha)
 
         return
-
 
 
     if latest_sha != CURRENT_SHA:
 
         print(
-            "New commit detected!"
+            "New commit detected"
         )
 
 
-        send_to_elitea(latest)
-
-
-        update_variable(latest_sha)
+        send_to_elitea(commit)
 
 
     else:
 
         print(
-            "No new commits."
+            "No changes"
         )
+
+
+    save_new_sha(latest_sha)
 
 
 

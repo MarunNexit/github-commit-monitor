@@ -5,20 +5,19 @@ import hashlib
 import requests
 
 
-# GitHub repository to monitor
 OWNER = "muk-as"
 REPO = "DOTA2_CLIENT"
 BRANCH = "master"
 
 
-# Elitea webhook URL
 ELITEA_WEBHOOK = os.environ["ELITEA_WEBHOOK"]
-
-# Elitea webhook secret
 ELITEA_SECRET = os.environ["ELITEA_SECRET"]
 
+CURRENT_SHA = os.environ.get("LAST_COMMIT_SHA", "")
 
-STATE_FILE = "last_commit.json"
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+
+VARIABLE_NAME = "LAST_COMMIT_SHA"
 
 
 
@@ -29,49 +28,22 @@ def get_latest_commit():
         f"{OWNER}/{REPO}/commits?sha={BRANCH}"
     )
 
+
     response = requests.get(url)
 
     response.raise_for_status()
 
-    commits = response.json()
-
-    return commits[0]
-
-
-
-def load_previous_commit():
-
-    if not os.path.exists(STATE_FILE):
-        return None
-
-    with open(STATE_FILE, "r") as file:
-        data = json.load(file)
-
-    return data.get("sha")
-
-
-
-def save_commit(sha):
-
-    with open(STATE_FILE, "w") as file:
-        json.dump(
-            {
-                "sha": sha
-            },
-            file,
-            indent=2
-        )
+    return response.json()[0]
 
 
 
 def create_signature(body):
 
     signature = hmac.new(
-        ELITEA_SECRET.encode("utf-8"),
-        body.encode("utf-8"),
+        ELITEA_SECRET.encode(),
+        body.encode(),
         hashlib.sha256
     ).hexdigest()
-
 
     return f"sha256={signature}"
 
@@ -83,21 +55,18 @@ def send_to_elitea(commit):
         "repository": f"{OWNER}/{REPO}",
         "branch": BRANCH,
         "commit_sha": commit["sha"],
-        "commit_message": commit["commit"]["message"],
+        "message": commit["commit"]["message"],
         "author": commit["commit"]["author"]["name"],
-        "commit_url": commit["html_url"]
+        "url": commit["html_url"]
     }
 
 
     body = json.dumps(payload)
 
 
-    signature = create_signature(body)
-
-
     headers = {
         "Content-Type": "application/json",
-        "X-Hub-Signature-256": signature
+        "X-Hub-Signature-256": create_signature(body)
     }
 
 
@@ -108,10 +77,42 @@ def send_to_elitea(commit):
     )
 
 
-    print(
-        "Elitea response:",
-        response.status_code,
-        response.text
+    print(response.status_code)
+    print(response.text)
+
+
+    response.raise_for_status()
+
+
+
+def update_variable(new_sha):
+
+    url = (
+        f"https://api.github.com/repos/"
+        f"{os.environ['GITHUB_REPOSITORY']}"
+        f"/actions/variables/{VARIABLE_NAME}"
+    )
+
+
+    headers = {
+        "Authorization":
+            f"Bearer {GITHUB_TOKEN}",
+
+        "Accept":
+            "application/vnd.github+json"
+    }
+
+
+    body = {
+        "name": VARIABLE_NAME,
+        "value": new_sha
+    }
+
+
+    response = requests.patch(
+        url,
+        headers=headers,
+        json=body
     )
 
 
@@ -121,55 +122,52 @@ def send_to_elitea(commit):
 
 def main():
 
-    print("Checking repository...")
+    latest = get_latest_commit()
 
-    commit = get_latest_commit()
-
-
-    current_sha = commit["sha"]
-
-    previous_sha = load_previous_commit()
+    latest_sha = latest["sha"]
 
 
-    print("Current commit:")
-    print(current_sha)
+    print(
+        "Latest:",
+        latest_sha
+    )
+
+    print(
+        "Stored:",
+        CURRENT_SHA
+    )
 
 
-    print("Previous commit:")
-    print(previous_sha)
-
-
-
-    # First run
-    if previous_sha is None:
-
-        save_commit(current_sha)
+    # first run
+    if not CURRENT_SHA:
 
         print(
-            "Initial commit saved"
+            "First run. Saving SHA."
         )
+
+        update_variable(latest_sha)
 
         return
 
 
 
-    if current_sha != previous_sha:
+    if latest_sha != CURRENT_SHA:
 
         print(
             "New commit detected!"
         )
 
 
-        send_to_elitea(commit)
+        send_to_elitea(latest)
 
 
-        save_commit(current_sha)
+        update_variable(latest_sha)
 
 
     else:
 
         print(
-            "No new commits"
+            "No new commits."
         )
 
 

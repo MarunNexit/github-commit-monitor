@@ -4,11 +4,9 @@ name: Monitor DOTA2_CLIENT
 on:
 
   schedule:
-    # every 5 minutes
     - cron: "*/5 * * * *"
 
 
-  # manual run button
   workflow_dispatch:
 
 
@@ -21,13 +19,15 @@ jobs:
 
 
     permissions:
-      contents: write
+      contents: read
+      actions: write
+
 
 
     steps:
 
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
 
@@ -56,25 +56,12 @@ jobs:
           ELITEA_SECRET:
             ${{ secrets.ELITEA_SECRET }}
 
+          LAST_COMMIT_SHA:
+            ${{ vars.LAST_COMMIT_SHA }}
+
+          GITHUB_TOKEN:
+            ${{ secrets.GITHUB_TOKEN }}
+
 
         run: |
           python monitor.py
-
-
-
-      - name: Save commit state
-
-        run: |
-
-          git config user.name "github-actions"
-
-          git config user.email "github-actions@github.com"
-
-
-          git add last_commit.json
-
-
-          git commit -m "Update last commit state" || true
-
-
-          git push
